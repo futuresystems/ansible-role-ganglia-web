@@ -1,6 +1,26 @@
 ---
 
-- name: install packages
+- name: set distribution facts (Debian)
+  when: ansible_os_family == 'Debian'
+  set_fact:
+    _ganglia_web_apache_service_name: apache2
+  tags:
+    - ganglia_web
+    - ganglia_web_facts
+    - facts
+
+- name: set distribution facts (RedHat)
+  when: ansible_os_family == 'RedHat'
+  set_fact:
+    _ganglia_web_apache_service_name: httpd
+  tags:
+    - ganglia_web
+    - ganglia_web_facts
+    - facts
+
+
+- name: install packages (Debian)
+  when: ansible_os_family == 'Debian'
   apt:
     name: "{{ item }}"
     state: present
@@ -13,7 +33,23 @@
     - install
     - ganglia
 
-- name: configure
+- name: install packages (RedHat)
+  when: ansible_os_family == 'RedHat'
+  yum:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - ganglia-web
+    - rrdtool
+  tags:
+    - ganglia_web_install
+    - ganglia_web
+    - install
+    - ganglia
+
+
+- name: configure (Debian)
+  when: ansible_os_family == 'Debian'
   file:
     src: /etc/ganglia-webfrontend/apache.conf
     path: /etc/apache2/sites-available/ganglia.conf
@@ -25,7 +61,8 @@
     - ganglia
 
 
-- name: enable ganglia web interface
+- name: enable ganglia web interface (Debian)
+  when: ansible_os_family == 'Debian'
   command: a2ensite ganglia
   register: enable_ganglia
   changed_when: "'Enabling site' in enable_ganglia.stdout"
@@ -36,9 +73,36 @@
     - ganglia
 
 
+- name: remove 'Require local' from httpd ganglia.conf (RedHat)
+  when: ansible_os_family == 'RedHat'
+  lineinfile:
+    dest: /etc/httpd/conf.d/ganglia.conf
+    regexp: "Require local"
+    state: absent
+  tags:
+    - ganglia_web_configure
+    - ganglia_web
+    - configure
+    - ganglia
+
+
+- name: add 'Require all granted' to httpd ganglia.conf (RedHat)
+  when: ansible_os_family == 'RedHat'
+  lineinfile:
+    dest: /etc/httpd/conf.d/ganglia.conf
+    line: "Require all granted"
+    insertafter: "<Location /ganglia>\n"
+    state: present
+  tags:
+    - ganglia_web_configure
+    - ganglia_web
+    - configure
+    - ganglia
+
+
 - name: reload apache
   service:
-    name: apache2
+    name: "{{ _ganglia_web_apache_service_name }}"
     state: reloaded
   tags:
     - ganglia_web_service
